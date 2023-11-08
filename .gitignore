@@ -16,3 +16,4 @@ mkfs
 syscalltable.h
 syscall.h
 usys.S
+bootblock2
