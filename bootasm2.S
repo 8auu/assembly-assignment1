@@ -93,8 +93,8 @@ real_start:
 read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
     movw    $7, 2(%si)                # Set the number of blocks to read to be 7
-    movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0x9000
-    movw    $1, 8(%si)                # Set the first block to read to be block 1
+    movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
+    movw    $0, 8(%si)                # Set the first block to read to be block 0
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
@@ -106,6 +106,7 @@ read_disk:
 
     movw $0xCFFF, %si
     call read_disk_loop
+    movw $16, %cx
 
     ret
 
@@ -122,13 +123,24 @@ read_disk_loop:
     movw $space, %si
     call cons_write
     popw %si
-    
+
+    dec %cx
+    cmp $0, %cx
+    jz jmpy
+
     call read_disk_loop
+
+jmpy:
+    call cons_write_crlf
+    movw $16, %cx
+    jmp read_disk_loop
+    
 
 HexChars:	.ascii "0123456789ABCDEF"
 
 cons_write_hex:
     pushw %si
+    pushw %cx
 	movw	$2, %cx
     movb    $0x0E, %ah
 	
@@ -139,6 +151,7 @@ hexloop:
     movb    HexChars(%si), %al
 	int		$0x10
 	loop	hexloop
+    popw %cx
     popw %si
     ret
 
@@ -151,6 +164,7 @@ read_failed:	                      # Display error messages
 
 finish:
     call finish
+
 
 boot_device:
     .byte   0
