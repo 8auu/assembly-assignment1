@@ -104,27 +104,32 @@ read_disk:
     cmpb    $0, %al
     je      read_failed
 
-    movb 0xD000, %bl
+    movw $0xCFFF, %si
     call read_disk_loop
 
     ret
 
-complete_emptyness:
+space:
     .string " "
 
 read_disk_loop:
-    movw $complete_emptyness, %si
-    call cons_write 
-    call cons_write_hex
-    inc %bl
-    cmp $0, %bl
+    movw (%si), %bx 
+    inc %si
+    cmp $0, %bx
     jz finish
+    call cons_write_hex
+    pushw %si
+    movw $space, %si
+    call cons_write
+    popw %si
+    
     call read_disk_loop
 
 HexChars:	.ascii "0123456789ABCDEF"
 
 cons_write_hex:
-	movw	$4, %cx
+    pushw %si
+	movw	$2, %cx
     movb    $0x0E, %ah
 	
 hexloop:
@@ -134,7 +139,8 @@ hexloop:
     movb    HexChars(%si), %al
 	int		$0x10
 	loop	hexloop
-	ret
+    popw %si
+    ret
 
 read_failed:	                      # Display error messages
 	movw 	$read_failed_msg, %si
