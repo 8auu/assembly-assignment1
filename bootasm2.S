@@ -115,10 +115,12 @@ space:
     .string " "
 
 read_disk_loop:
+    # stop reading sector, no bytes left
+    cmp $16, %dl # dl represents the amount of lines that have been output onto the screen
+    jz finish
+
     movw (%si), %bx 
     inc %si
-    # cmp $0, %bx
-    # jz finish
     call cons_write_hex
 
     # output spaces between hex values
@@ -132,15 +134,11 @@ read_disk_loop:
     cmp $16, %cx
     jz jmpy
 
-    # stop reading sector, no bytes left
-    inc %dl
-    cmp $512, %dl
-    jz finish
-
     call read_disk_loop
 
 jmpy:
     call cons_write_crlf
+    inc %dl
     movw $0, %cx
     jmp read_disk_loop
 
