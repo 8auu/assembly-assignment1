@@ -44,6 +44,9 @@ cons_writeline:
     ret      
 
 get_keyboard_input:
+    movw $enter_sector_number_message, %si
+    call cons_write
+
     # http://www.ctyme.com/intr/rb-1754.htm
     movb $0x00, %ah     # int 16 bios call for get keystroke
     int $0x16           # run get keystroke interrupt
@@ -82,9 +85,6 @@ real_start:
 
     movw    $fd, %si
 
-    movw $enter_sector_number_message, %si
-    call cons_write
-
     call get_keyboard_input # returns value to %AL
     call read_disk
 
@@ -105,8 +105,9 @@ read_disk:
     je      read_failed
 
     movw $0xCFFF, %si
+    movw $0, %cx
+    movb $0, %dl
     call read_disk_loop
-    movw $16, %cx
 
     ret
 
@@ -116,27 +117,35 @@ space:
 read_disk_loop:
     movw (%si), %bx 
     inc %si
-    cmp $0, %bx
-    jz finish
+    # cmp $0, %bx
+    # jz finish
     call cons_write_hex
+
+    # output spaces between hex values
     pushw %si
     movw $space, %si
     call cons_write
     popw %si
-
-    dec %cx
-    cmp $0, %cx
+    
+    # display new line
+    inc %cx
+    cmp $16, %cx
     jz jmpy
+
+    # stop reading sector, no bytes left
+    inc %dl
+    cmp $512, %dl
+    jz finish
 
     call read_disk_loop
 
 jmpy:
     call cons_write_crlf
-    movw $16, %cx
+    movw $0, %cx
     jmp read_disk_loop
-    
 
-HexChars:	.ascii "0123456789ABCDEF"
+HexChars:	
+    .ascii "0123456789ABCDEF"
 
 cons_write_hex:
     pushw %si
