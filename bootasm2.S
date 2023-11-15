@@ -43,6 +43,12 @@ cons_writeline:
     call    cons_write_crlf
     ret      
 
+wrong: .string "this is wrong"
+woop:
+    movw $wrong, %si
+    call cons_writeline
+    jmp finish
+
 get_keyboard_input:
     movw $enter_sector_number_message, %si
     call cons_write
@@ -64,10 +70,15 @@ get_keyboard_input:
 
     popw %ax # restore values of ax
 
+    # convert ascii character to an integer value
+    sub $48, %al    
+
+    pushw %ax
     # output the inputted character to screen
     movb    $0x0e, %ah
     int $0x10
     call cons_write_crlf
+    popw %ax
 
     ret
 
@@ -85,7 +96,7 @@ real_start:
 
     movw    $fd, %si
 
-    call get_keyboard_input # returns value to %AL
+    call get_keyboard_input # returns number 1-9 into %AX
     call read_disk
 
     jmp     finish
@@ -94,7 +105,7 @@ read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
     movw    $7, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
-    movw    $0, 8(%si)                # Set the first block to read to be block 0
+    movb    %al, 8(%si)                # Set the first block to read to be block 0
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
@@ -135,6 +146,8 @@ read_disk_loop:
     jz jmpy
 
     call read_disk_loop
+
+
 
 jmpy:
     call cons_write_crlf
