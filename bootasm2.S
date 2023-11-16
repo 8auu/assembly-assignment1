@@ -127,8 +127,8 @@ space:
     .string " "
 
 read_disk_loop:
-    # stop reading sector, no bytes left
-    cmp $16, %dl # dl represents the amount of lines that have been output onto the screen
+    # dl represents the amount of lines that have been output onto the screen
+    cmp $16, %dl
     jz finish
 
     movw (%si), %bx 
