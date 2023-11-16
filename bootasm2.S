@@ -115,7 +115,8 @@ read_disk:
     cmpb    $0, %al
     je      read_failed
 
-    movw $0xCFFF, %si
+    movw $0xD000, %si
+    dec %si
     movw $0, %cx
     movb $0, %dl
     call read_disk_loop
