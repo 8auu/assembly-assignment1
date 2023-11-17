@@ -119,6 +119,7 @@ read_disk:
     dec %si
     movw $0, %cx
     movb $0, %dl
+    movb $0, %dh
     call read_disk_loop
 
     ret
@@ -127,37 +128,62 @@ space:
     .string " "
 
 read_disk_loop:
-    # dl represents the amount of lines that have been output onto the screen
-    cmp $16, %dl
+    # dh represents the amount of lines that have been output onto the screen
+    cmp $16, %cl
     jz finish
 
     movw (%si), %bx 
     inc %si
     call cons_write_hex
+    
+    inc %dx
 
     # output spaces between hex values
     pushw %si
     movw $space, %si
     call cons_write
     popw %si
-    
+
     # display new line
-    inc %cx
-    cmp $16, %cx
+    inc %ch
+    cmp $16, %ch
     jz jmpy
 
     call read_disk_loop
 
 
-
 jmpy:
+    movw %dx, %bx 
+    call cons_write_hex2
+
     call cons_write_crlf
-    inc %dl
-    movw $0, %cx
+    inc %cl
+    movb $0, %ch
     jmp read_disk_loop
 
 HexChars:	
     .ascii "0123456789ABCDEF"
+
+cons_write_hex2:
+    pushw %si
+    pushw %cx
+
+	movw	$4, %cx
+    
+    movb    $0x0E, %ah
+	
+hexloop2:
+    rol     $4, %bx
+    movw    %bx, %si
+    and     $0x000F, %si
+    movb    HexChars(%si), %al
+	int		$0x10
+	loop	hexloop2
+    movw $space, %si
+    call cons_write
+    popw %cx
+    popw %si
+    ret
 
 cons_write_hex:
     pushw %si
