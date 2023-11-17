@@ -21,12 +21,18 @@ cons_write_rpt:
     movb    (%si), %al          # Load the byte at the location contained in the SI register into AL   
     inc     %si                 # Add 1 to the value in SI
 
-    cmp $31, %al
-    jle cons_write_done # jump if less than
-
     cmp     $0, %al             # Compare the value in AL with 0
-
     jz      cons_write_done     # If it is zero, then we are done
+
+    cmp $31, %al
+    jb replace_system_char
+
+    jmp cons_write_output
+
+replace_system_char:
+    movb $95, %al
+
+cons_write_output:
     int     $0x10               # Output the character in AL to the screen
     jmp     cons_write_rpt      # and continue
 
@@ -117,7 +123,7 @@ read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
     movw    $7, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
-    movb    %al, 8(%si)                # Set the first block to read to be block 0
+    movb    %al, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
@@ -145,11 +151,11 @@ space:
 
 read_disk_loop:
     # cl represents the amount of lines that have been output onto the screen
-    cmp $16, %cl
+    cmp $1, %cl
     jz finish
-
+    
     movw (%si), %bx 
-    inc %si
+    # inc %si
     call cons_write_hex
     
     inc %dx
@@ -160,49 +166,21 @@ read_disk_loop:
     call cons_write
     popw %si
 
-
-    pushw %cx
-    pushw %si
-    # call print_ascii_loop
-    popw %si
-    popw %cx
-
-
     # display new line
     inc %ch
     cmp $16, %ch
     jz print_new_line
 
     call read_disk_loop
-
-
-print_ascii_loop:
-    pushw %bx
-    
-    inc %cx
-
-    cmp $16, %cx
-    jz finish
-    movw (%si), %bx
-    call cons_write
-    movw %bx, %si
-    inc %si
-
-    popw %bx
-    ret
-
-continue_read:
-    .string "Press a key to continue..."
-
-last_line_of_sector:
-    movw $continue_read, %si
-    call cons_write
-
-    call get_keyboard_input
-
-    jmp read_disk_start
+    jmp finish
 
 print_new_line:
+
+    movw %si, %bx 
+    inc %si
+    call cons_write
+    movw %bx, %si
+
     call cons_write_crlf
     
     cmp $15, %cl
@@ -214,6 +192,17 @@ print_new_line:
     inc %cl
     movb $0, %ch
     jmp read_disk_loop
+
+last_line_of_sector:
+    movw $continue_read, %si
+    call cons_write
+
+    call get_keyboard_input
+
+    jmp read_disk_start
+
+continue_read:
+    .string "Press a key to continue..."
 
 HexChars:	
     .ascii "0123456789ABCDEF"
