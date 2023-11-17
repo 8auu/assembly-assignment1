@@ -20,23 +20,43 @@ cons_write:
 cons_write_rpt:
     movb    (%si), %al          # Load the byte at the location contained in the SI register into AL   
     inc     %si                 # Add 1 to the value in SI
-
     cmp     $0, %al             # Compare the value in AL with 0
     jz      cons_write_done     # If it is zero, then we are done
-
-    cmp $31, %al
-    jb replace_system_char
-
-    jmp cons_write_output
-
-replace_system_char:
-    movb $95, %al
-
-cons_write_output:
     int     $0x10               # Output the character in AL to the screen
     jmp     cons_write_rpt      # and continue
 
 cons_write_done:                # Something that is called will never return 
+    ret                         # until a 'ret' instruction is encountered.  Labels do 
+                                # not give a program any structure.  They just give a 
+                                # memory location a name that we can use in our code. 
+
+
+cons_write_ascii:
+    pushw %cx
+    movw $16, %cx
+    movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
+
+
+cons_write_ascii_rpt:    
+    movb    (%si), %al          # Load the byte at the location contained in the SI register into AL   
+    inc     %si                 # Add 1 to the value in SI
+    
+    cmp $32, %al
+    jb replace_system_char
+    jmp cons_write_output
+
+
+replace_system_char:
+    movb $95, %al # replace with _
+
+
+cons_write_output:
+    int     $0x10               # Output the character in AL to the screen
+    loop     cons_write_ascii_rpt      # and continue
+
+
+cons_write_ascii_done:                # Something that is called will never return 
+    popw %cx
     ret                         # until a 'ret' instruction is encountered.  Labels do 
                                 # not give a program any structure.  They just give a 
                                 # memory location a name that we can use in our code. 
@@ -151,11 +171,11 @@ space:
 
 read_disk_loop:
     # cl represents the amount of lines that have been output onto the screen
-    cmp $1, %cl
+    cmp $16, %cl
     jz finish
     
     movw (%si), %bx 
-    # inc %si
+    inc %si
     call cons_write_hex
     
     inc %dx
@@ -175,10 +195,10 @@ read_disk_loop:
     jmp finish
 
 print_new_line:
-
     movw %si, %bx 
-    inc %si
-    call cons_write
+    sub $16, %si
+    call cons_write_ascii
+    add $16, %si
     movw %bx, %si
 
     call cons_write_crlf
