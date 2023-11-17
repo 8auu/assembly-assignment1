@@ -118,8 +118,11 @@ read_disk:
     movw $0xD000, %si
     dec %si
     movw $0, %cx
-    movb $0, %dl
-    movb $0, %dh
+    movw $0, %dx
+    
+    movw %dx, %bx 
+    call cons_write_hex2
+
     call read_disk_loop
 
     ret
@@ -128,7 +131,7 @@ space:
     .string " "
 
 read_disk_loop:
-    # dh represents the amount of lines that have been output onto the screen
+    # cl represents the amount of lines that have been output onto the screen
     cmp $16, %cl
     jz finish
 
@@ -147,16 +150,23 @@ read_disk_loop:
     # display new line
     inc %ch
     cmp $16, %ch
-    jz jmpy
+    jz print_new_line
 
     call read_disk_loop
 
 
-jmpy:
+last_line:
+    call finish
+
+print_new_line:
+    call cons_write_crlf
+    
+    cmp $15, %cl
+    jz last_line
+    
     movw %dx, %bx 
     call cons_write_hex2
 
-    call cons_write_crlf
     inc %cl
     movb $0, %ch
     jmp read_disk_loop
