@@ -74,12 +74,6 @@ cons_writeline:
     call    cons_write_crlf
     ret      
 
-wrong: .string "this is wrong"
-woop:
-    movw $wrong, %si
-    call cons_writeline
-    jmp finish
-
 
 # returns keyboard input value (ascii) to %AL
 # http://www.ctyme.com/intr/rb-1754.htm
@@ -154,7 +148,6 @@ read_disk:
     je      read_failed
 
     movw $0xD000, %si
-    dec %si
     movw $0, %cx
     movw $0, %dx
     
@@ -175,8 +168,8 @@ read_disk_loop:
     jz finish
     
     movw (%si), %bx 
-    inc %si
     call cons_write_hex
+    inc %si
     
     inc %dx
 
@@ -253,6 +246,7 @@ cons_write_hex:
     pushw %cx
 	movw	$2, %cx
     movb    $0x0E, %ah
+    rol     $8, %bx
 	
 hexloop:
     rol     $4, %bx
