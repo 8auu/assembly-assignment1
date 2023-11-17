@@ -20,7 +20,12 @@ cons_write:
 cons_write_rpt:
     movb    (%si), %al          # Load the byte at the location contained in the SI register into AL   
     inc     %si                 # Add 1 to the value in SI
+
+    cmp $31, %al
+    jle cons_write_done # jump if less than
+
     cmp     $0, %al             # Compare the value in AL with 0
+
     jz      cons_write_done     # If it is zero, then we are done
     int     $0x10               # Output the character in AL to the screen
     jmp     cons_write_rpt      # and continue
@@ -49,14 +54,39 @@ woop:
     call cons_writeline
     jmp finish
 
+
+# returns keyboard input value (ascii) to %AL
+# http://www.ctyme.com/intr/rb-1754.htm
 get_keyboard_input:
+    movb $0x00, %ah     # int 16 bios call for get keystroke
+    int $0x16           # run get keystroke interrupt
+    ret
+
+real_start:
+    movb    %dl, (boot_device) # Boot device number is passed in DL from BIOS. Save it here since DL might get trashed
+
+    movw    $boot_message, %si  # Display our boot message
+    call    cons_writeline
+
+    movw    $booted_from_msg, %si
+    call    cons_write
+
+    movb    (boot_device), %dl
+    cmp     $0x80, %dl
+
+    movw    $fd, %si
+
+    call read_disk_start
+
+    jmp     finish
+
+read_disk_start:
+    call cons_write_crlf
     movw $enter_sector_number_message, %si
     call cons_write
 
-    # http://www.ctyme.com/intr/rb-1754.htm
-    movb $0x00, %ah     # int 16 bios call for get keystroke
-    int $0x16           # run get keystroke interrupt
- 
+    call get_keyboard_input # returns number 1-9 into %AX
+
     # output character to screen
     movb    $0x0e, %ah
     int $0x10
@@ -80,26 +110,8 @@ get_keyboard_input:
     call cons_write_crlf
     popw %ax
 
-    ret
-
-real_start:
-    movb    %dl, (boot_device) # Boot device number is passed in DL from BIOS. Save it here since DL might get trashed
-
-    movw    $boot_message, %si  # Display our boot message
-    call    cons_writeline
-
-    movw    $booted_from_msg, %si
-    call    cons_write
-
-    movb    (boot_device), %dl
-    cmp     $0x80, %dl
-
-    movw    $fd, %si
-
-    call get_keyboard_input # returns number 1-9 into %AX
     call read_disk
-
-    jmp     finish
+    ret
 
 read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
@@ -120,6 +132,7 @@ read_disk:
     movw $0, %cx
     movw $0, %dx
     
+    # print first offset (0000)
     movw %dx, %bx 
     call cons_write_hex2
 
@@ -147,6 +160,14 @@ read_disk_loop:
     call cons_write
     popw %si
 
+
+    pushw %cx
+    pushw %si
+    # call print_ascii_loop
+    popw %si
+    popw %cx
+
+
     # display new line
     inc %ch
     cmp $16, %ch
@@ -155,14 +176,37 @@ read_disk_loop:
     call read_disk_loop
 
 
-last_line:
-    call finish
+print_ascii_loop:
+    pushw %bx
+    
+    inc %cx
+
+    cmp $16, %cx
+    jz finish
+    movw (%si), %bx
+    call cons_write
+    movw %bx, %si
+    inc %si
+
+    popw %bx
+    ret
+
+continue_read:
+    .string "Press a key to continue..."
+
+last_line_of_sector:
+    movw $continue_read, %si
+    call cons_write
+
+    call get_keyboard_input
+
+    jmp read_disk_start
 
 print_new_line:
     call cons_write_crlf
     
     cmp $15, %cl
-    jz last_line
+    jz last_line_of_sector
     
     movw %dx, %bx 
     call cons_write_hex2
