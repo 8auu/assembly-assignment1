@@ -45,7 +45,6 @@ cons_write_ascii_rpt:
     jb replace_system_char
     jmp cons_write_output
 
-
 replace_system_char:
     movb $95, %al # replace with _
 
@@ -135,7 +134,7 @@ read_disk_start:
 
 read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
-    movw    $7, 2(%si)                # Set the number of blocks to read to be 7
+    movw    $2, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
     movb    %al, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
@@ -163,14 +162,17 @@ space:
     .string " "
 
 read_disk_loop:
-    # cl represents the amount of lines that have been output onto the screen
-    cmp $16, %cl
-    jz finish
+    # # cl represents the amount of lines that have been output onto the screen
+    # cmp $16, %cl
+    # jz last_line_of_sector
+
+    # cmp $32, %cl
+    # jz last_line_of_sector
     
     movw (%si), %bx 
     call cons_write_hex
-    inc %si
     
+    inc %si
     inc %dx
 
     # output spaces between hex values
@@ -185,9 +187,10 @@ read_disk_loop:
     jz print_new_line
 
     call read_disk_loop
-    jmp finish
 
 print_new_line:
+    inc %cl
+    movb $0, %ch
     movw %si, %bx 
     sub $16, %si
     call cons_write_ascii
@@ -195,24 +198,33 @@ print_new_line:
     movw %bx, %si
 
     call cons_write_crlf
+
     
-    cmp $15, %cl
+    # first half of sector
+    cmp $16, %cl
     jz last_line_of_sector
+
+    # second half of sector
+    cmp $32, %cl
+    jz last_line_of_sector
+
+    movw %dx, %bx 
+    call cons_write_hex2
+    
+    jmp read_disk_loop
+
+last_line_of_sector:
+    pushw %si
+    movw $continue_read, %si
+    call cons_writeline
+    popw %si
+
+    call get_keyboard_input
     
     movw %dx, %bx 
     call cons_write_hex2
 
-    inc %cl
-    movb $0, %ch
     jmp read_disk_loop
-
-last_line_of_sector:
-    movw $continue_read, %si
-    call cons_write
-
-    call get_keyboard_input
-
-    jmp read_disk_start
 
 continue_read:
     .string "Press a key to continue..."
