@@ -14,6 +14,26 @@ start:
 # 
 # Input: SI contains the address of the null-terminated string to be displayed
 
+cons_write_int:
+    movw    $IntBuffer + 4, %si
+    movw    %bx, %ax
+	
+getdigit:
+	xor		%dx, %dx
+	movw	$10, %cx
+	div		%cx
+	addb	$48, %dl
+	movb	%dl, (%si)
+	dec		%si
+	cmp		$0, %ax
+	jne		getdigit
+	inc		%si
+	call	cons_write
+	ret
+	
+IntBuffer:   .string "     "
+
+
 cons_write:
     movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
 
@@ -100,27 +120,13 @@ real_start:
     jmp     finish
 
 read_disk_start:
-    call cons_write_crlf
-    movw $enter_sector_number_message, %si
-    call cons_write
+    call get_sector_number
 
-    call get_keyboard_input # returns number 1-9 into %AX
-
-    # output character to screen
-    movb    $0x0e, %ah
-    int $0x10
- 
-    pushw %ax # save the contents of %al (the inputted character)
-    call cons_write_crlf
+    popw %ax # restore values of ax
 
     # output contents of sector message
     movw $contents_of_sector_message, %si
     call cons_write
-
-    popw %ax # restore values of ax
-
-    # convert ascii character to an integer value
-    sub $48, %al    
 
     pushw %ax
     # output the inputted character to screen
@@ -131,6 +137,48 @@ read_disk_start:
 
     call read_disk
     ret
+
+
+get_sector_number:
+    call cons_write_crlf
+    movw $enter_sector_number_message, %si
+    call cons_write
+
+    # we will store the number in dx
+    xor %bx, %bx # reset dx
+    
+    pushw %cx
+    movw $0, %cx
+    call sector_number_loop
+    popw %cx
+
+
+sector_number_loop:
+    call get_keyboard_input # Get input into %AX
+
+    # output character to screen
+    movb $0x0e, %ah
+    int $0x10
+
+    cmp $13, %al # Check if input is Enter
+    jz endr
+
+    # Convert ASCII to digit
+    sub $48, %al      # Convert from ASCII to digit
+    add %bx, %ax # Add the new digit to BX (use %al instead of %ax)
+    
+    imul $10, %bx # Multiply BX by 10
+    inc %cx
+    cmp $4, %cx
+    jz endr
+
+
+    call sector_number_loop
+
+endr:
+    cmp $1234, %bx
+    jz finish
+
 
 read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
@@ -275,8 +323,16 @@ read_failed:	                      # Display error messages
 	mov 	$cannot_continue, %si	
     call    cons_writeline
 
+code_finished:
+    .string "The code is finished"
+
 finish:
-    call finish
+    call cons_write_crlf
+    call cons_write_crlf
+    call cons_write_crlf
+
+endless_loop:
+    call endless_loop
 
 
 boot_device:
