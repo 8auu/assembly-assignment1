@@ -20,17 +20,42 @@ cons_write:
 cons_write_rpt:
     movb    (%si), %al          # Load the byte at the location contained in the SI register into AL   
     inc     %si                 # Add 1 to the value in SI
-
-    cmp $31, %al
-    jle cons_write_done # jump if less than
-
     cmp     $0, %al             # Compare the value in AL with 0
-
     jz      cons_write_done     # If it is zero, then we are done
     int     $0x10               # Output the character in AL to the screen
     jmp     cons_write_rpt      # and continue
 
 cons_write_done:                # Something that is called will never return 
+    ret                         # until a 'ret' instruction is encountered.  Labels do 
+                                # not give a program any structure.  They just give a 
+                                # memory location a name that we can use in our code. 
+
+
+cons_write_ascii:
+    pushw %cx
+    movw $16, %cx
+    movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
+
+
+cons_write_ascii_rpt:    
+    movb    (%si), %al          # Load the byte at the location contained in the SI register into AL   
+    inc     %si                 # Add 1 to the value in SI
+    
+    cmp $32, %al
+    jb replace_system_char
+    jmp cons_write_output
+
+replace_system_char:
+    movb $95, %al # replace with _
+
+
+cons_write_output:
+    int     $0x10               # Output the character in AL to the screen
+    loop     cons_write_ascii_rpt      # and continue
+
+
+cons_write_ascii_done:                # Something that is called will never return 
+    popw %cx
     ret                         # until a 'ret' instruction is encountered.  Labels do 
                                 # not give a program any structure.  They just give a 
                                 # memory location a name that we can use in our code. 
@@ -47,12 +72,6 @@ cons_writeline:
     call    cons_write
     call    cons_write_crlf
     ret      
-
-wrong: .string "this is wrong"
-woop:
-    movw $wrong, %si
-    call cons_writeline
-    jmp finish
 
 
 # returns keyboard input value (ascii) to %AL
@@ -115,9 +134,9 @@ read_disk_start:
 
 read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
-    movw    $7, 2(%si)                # Set the number of blocks to read to be 7
+    movw    $2, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
-    movb    %al, 8(%si)                # Set the first block to read to be block 0
+    movb    %al, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
@@ -128,7 +147,6 @@ read_disk:
     je      read_failed
 
     movw $0xD000, %si
-    dec %si
     movw $0, %cx
     movw $0, %dx
     
@@ -137,83 +155,76 @@ read_disk:
     call cons_write_hex2
 
     call read_disk_loop
-
     ret
 
-space:
-    .string " "
-
-read_disk_loop:
-    # cl represents the amount of lines that have been output onto the screen
-    cmp $16, %cl
-    jz finish
-
+read_disk_loop:   
     movw (%si), %bx 
-    inc %si
     call cons_write_hex
-    
-    inc %dx
 
     # output spaces between hex values
     pushw %si
     movw $space, %si
     call cons_write
     popw %si
-
-
-    pushw %cx
-    pushw %si
-    # call print_ascii_loop
-    popw %si
-    popw %cx
-
+    
+    inc %si
+    inc %dx
 
     # display new line
     inc %ch
     cmp $16, %ch
-    jz print_new_line
+    jz finish_line
 
     call read_disk_loop
 
+finish_line:
+    inc %cl
+    movb $0, %ch
+    movw %si, %bx 
 
-print_ascii_loop:
-    pushw %bx
-    
-    inc %cx
-
-    cmp $16, %cx
-    jz finish
-    movw (%si), %bx
-    call cons_write
+    # remove 16 off of SI so we can start at the beginning of the line
+    sub $16, %si
+    call cons_write_ascii
+    add $16, %si # add 16 back so we're not reading the already read bytes
     movw %bx, %si
-    inc %si
 
-    popw %bx
-    ret
+    call cons_write_crlf
 
-continue_read:
-    .string "Press a key to continue..."
+    # first half of sector
+    cmp $16, %cl
+    jz last_line_of_block
 
-last_line_of_sector:
+    # second half of sector
+    cmp $32, %cl
+    jz last_line_of_sector
+
+    movw %dx, %bx 
+    call cons_write_hex2
+    
+    jmp read_disk_loop
+
+last_line_of_block:
+    pushw %si
     movw $continue_read, %si
-    call cons_write
+    call cons_writeline
+    popw %si
 
     call get_keyboard_input
-
-    jmp read_disk_start
-
-print_new_line:
-    call cons_write_crlf
-    
-    cmp $15, %cl
-    jz last_line_of_sector
     
     movw %dx, %bx 
     call cons_write_hex2
 
-    inc %cl
-    movb $0, %ch
     jmp read_disk_loop
+
+sector_finished: .string "End of sector"
+
+last_line_of_sector:
+    movw $sector_finished, %si
+    call cons_writeline
+    jmp read_disk_start
+
+continue_read:
+    .string "Press a key to continue..."
 
 HexChars:	
     .ascii "0123456789ABCDEF"
@@ -232,7 +243,7 @@ hexloop2:
     and     $0x000F, %si
     movb    HexChars(%si), %al
 	int		$0x10
-	loop	hexloop2
+	loop hexloop2
     movw $space, %si
     call cons_write
     popw %cx
@@ -244,6 +255,7 @@ cons_write_hex:
     pushw %cx
 	movw	$2, %cx
     movb    $0x0E, %ah
+    rol     $8, %bx
 	
 hexloop:
     rol     $4, %bx
@@ -278,10 +290,12 @@ fd: .string "floppy disk"
 hd: .string "hard drive"
 
 enter_sector_number_message: 
-    .string "enter the sector number to read: "
+    .string "Enter the sector number to read: "
 
 contents_of_sector_message: 
     .string "Contents of sector "  
+space:
+    .string " "
 
 
 # Format of disk address packet
