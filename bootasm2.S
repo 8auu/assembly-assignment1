@@ -155,54 +155,44 @@ read_disk:
     call cons_write_hex2
 
     call read_disk_loop
-
     ret
 
-space:
-    .string " "
-
-read_disk_loop:
-    # # cl represents the amount of lines that have been output onto the screen
-    # cmp $16, %cl
-    # jz last_line_of_sector
-
-    # cmp $32, %cl
-    # jz last_line_of_sector
-    
+read_disk_loop:   
     movw (%si), %bx 
     call cons_write_hex
-    
-    inc %si
-    inc %dx
 
     # output spaces between hex values
     pushw %si
     movw $space, %si
     call cons_write
     popw %si
+    
+    inc %si
+    inc %dx
 
     # display new line
     inc %ch
     cmp $16, %ch
-    jz print_new_line
+    jz finish_line
 
     call read_disk_loop
 
-print_new_line:
+finish_line:
     inc %cl
     movb $0, %ch
     movw %si, %bx 
+
+    # remove 16 off of SI so we can start at the beginning of the line
     sub $16, %si
     call cons_write_ascii
-    add $16, %si
+    add $16, %si # add 16 back so we're not reading the already read bytes
     movw %bx, %si
 
     call cons_write_crlf
 
-    
     # first half of sector
     cmp $16, %cl
-    jz last_line_of_sector
+    jz last_line_of_block
 
     # second half of sector
     cmp $32, %cl
@@ -213,7 +203,7 @@ print_new_line:
     
     jmp read_disk_loop
 
-last_line_of_sector:
+last_line_of_block:
     pushw %si
     movw $continue_read, %si
     call cons_writeline
@@ -225,6 +215,13 @@ last_line_of_sector:
     call cons_write_hex2
 
     jmp read_disk_loop
+
+sector_finished: .string "End of sector"
+
+last_line_of_sector:
+    movw $sector_finished, %si
+    call cons_writeline
+    jmp read_disk_start
 
 continue_read:
     .string "Press a key to continue..."
@@ -246,7 +243,7 @@ hexloop2:
     and     $0x000F, %si
     movb    HexChars(%si), %al
 	int		$0x10
-	loop	hexloop2
+	loop hexloop2
     movw $space, %si
     call cons_write
     popw %cx
@@ -293,10 +290,12 @@ fd: .string "floppy disk"
 hd: .string "hard drive"
 
 enter_sector_number_message: 
-    .string "enter the sector number to read: "
+    .string "Enter the sector number to read: "
 
 contents_of_sector_message: 
     .string "Contents of sector "  
+space:
+    .string " "
 
 
 # Format of disk address packet
