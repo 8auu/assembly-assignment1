@@ -154,52 +154,47 @@ get_sector_number:
 
 
 sector_number_loop:
-    call get_keyboard_input # Get input into %AX
+    call get_keyboard_input
 
     # output character to screen
     movb $0x0e, %ah
     int $0x10
 
-    cmp $13, %al # Check if input is Enter
-    jz endr
+    cmp $13, %al # Check if input is enter
+    jz read_disk
 
+    xor %ah, %ah
     # Convert ASCII to digit
-    sub $48, %al      # Convert from ASCII to digit
-    add %bx, %ax # Add the new digit to BX (use %al instead of %ax)
-    
-    imul $10, %bx # Multiply BX by 10
+    sub $48, %al
+
+    imul $10, %bx
+    add %ax, %bx
+
     inc %cx
     cmp $4, %cx
-    jz endr
-
+    jz read_disk
 
     call sector_number_loop
-
-endr:
-    cmp $1234, %bx
-    jz finish
-
 
 read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
     movw    $2, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
-    movb    %al, 8(%si)                # Set the first block to read to be block the keyboard input
+    movw    %bx, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
     jc      read_failed	              # The carry flag will be set if an error occured
 
     movb    (0xD000), %al             # Check that what we loaded is not empty
-    cmpb    $0, %al
-    je      read_failed
 
+    # prepare registers for disk loop
     movw $0xD000, %si
     movw $0, %cx
     movw $0, %dx
     
     # print first offset (0000)
-    movw %dx, %bx 
+    movw %dx, %bx
     call cons_write_hex2
 
     call read_disk_loop
