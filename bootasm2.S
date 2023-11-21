@@ -138,20 +138,22 @@ read_disk_start:
     call read_disk
     ret
 
+enter_amount_of_sector_to_read_message:
+    .string "Enter amount of sector to read: "
+
 
 get_sector_number:
     call cons_write_crlf
     movw $enter_sector_number_message, %si
     call cons_write
 
-    # we will store the number in dx
+    # we will store the number in dxwbn
     xor %bx, %bx # reset dx
     
     pushw %cx
     movw $0, %cx
     call sector_number_loop
     popw %cx
-
 
 sector_number_loop:
     call get_keyboard_input
@@ -178,8 +180,18 @@ sector_number_loop:
 
 read_disk:
     call cons_write_crlf
+    movw $enter_amount_of_sector_to_read_message, %si
+    call cons_write
+
+    call get_keyboard_input
+
+    # output character to screen
+    movb $0x0e, %ah
+    int $0x10
+
+    call cons_write_crlf
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
-    movw    $2, 2(%si)                # Set the number of blocks to read to be 7
+    movb    %al, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
     movw    %bx, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
