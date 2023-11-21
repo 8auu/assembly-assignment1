@@ -123,7 +123,7 @@ read_disk_start:
     ret
 
 enter_amount_of_sector_to_read_message:
-    .string "Enter amount of sector to read: "
+    .string "Enter amount of sectors to read: "
 
 
 get_sector_number:
@@ -168,12 +168,14 @@ read_disk:
     call cons_write
     xor %ax, %ax
     call get_keyboard_input
-    # Convert ASCII to digit
-    sub $48, %al
 
     # output character to screen
     movb $0x0e, %ah
     int $0x10
+
+    sub $48, %al
+    xor %ah, %ah
+    imul $2, %ax
 
     call cons_write_crlf
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
@@ -262,7 +264,7 @@ last_line_of_block:
 
     jmp read_disk_loop
 
-sector_finished: .string "End of sector"
+sector_finished: .string "Finished reading requested sectors"
 
 last_line_of_sector:
     movw $sector_finished, %si
