@@ -10,31 +10,10 @@
 start:
     jmp     real_start
 
-# Write to the console using BIOS.
-# 
-# Input: SI contains the address of the null-terminated string to be displayed
-
-cons_write_int:
-    movw    $IntBuffer + 4, %si
-    movw    %bx, %ax
-	
-getdigit:
-	xor		%dx, %dx
-	movw	$10, %cx
-	div		%cx
-	addb	$48, %dl
-	movb	%dl, (%si)
-	dec		%si
-	cmp		$0, %ax
-	jne		getdigit
-	inc		%si
-	call	cons_write
-	ret
-	
-IntBuffer:   .string "     "
 
 
 cons_write:
+    pushw %ax
     movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
 
 cons_write_rpt:
@@ -46,12 +25,14 @@ cons_write_rpt:
     jmp     cons_write_rpt      # and continue
 
 cons_write_done:                # Something that is called will never return 
+    popw %ax
     ret                         # until a 'ret' instruction is encountered.  Labels do 
                                 # not give a program any structure.  They just give a 
                                 # memory location a name that we can use in our code. 
 
 
 cons_write_ascii:
+    pushw %ax
     pushw %cx
     movw $16, %cx
     movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
@@ -76,16 +57,19 @@ cons_write_output:
 
 cons_write_ascii_done:                # Something that is called will never return 
     popw %cx
+    popw %ax
     ret                         # until a 'ret' instruction is encountered.  Labels do 
                                 # not give a program any structure.  They just give a 
                                 # memory location a name that we can use in our code. 
 
 cons_write_crlf:
+    pushw %ax
     movb    $0x0e, %ah          # Output CR
     movb    $0x0d, %al
     int     $0x10
     movb    $0x0a, %al          # Output LF
     int     $0x10
+    popw %ax
     ret
 
 cons_writeline:
@@ -182,8 +166,10 @@ read_disk:
     call cons_write_crlf
     movw $enter_amount_of_sector_to_read_message, %si
     call cons_write
-
+    xor %ax, %ax
     call get_keyboard_input
+    # Convert ASCII to digit
+    sub $48, %al
 
     # output character to screen
     movb $0x0e, %ah
@@ -198,8 +184,6 @@ read_disk:
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
     jc      read_failed	              # The carry flag will be set if an error occured
-
-    movb    (0xD000), %al             # Check that what we loaded is not empty
 
     # prepare registers for disk loop
     movw $0xD000, %si
@@ -224,7 +208,6 @@ read_disk_loop:
     popw %si
     
     inc %si
-    inc %dx
 
     # display new line
     inc %ch
@@ -236,7 +219,7 @@ read_disk_loop:
 finish_line:
     inc %cl
     movb $0, %ch
-    movw %si, %bx 
+    movw %si, %bx
 
     # remove 16 off of SI so we can start at the beginning of the line
     sub $16, %si
@@ -250,25 +233,32 @@ finish_line:
     cmp $16, %cl
     jz last_line_of_block
 
-    # second half of sector
-    cmp $32, %cl
-    jz last_line_of_sector
-
     movw %dx, %bx 
     call cons_write_hex2
-    
+
     jmp read_disk_loop
 
 last_line_of_block:
+    inc %dh
+    cmp %dh, %al
+    jz last_line_of_sector
+
     pushw %si
     movw $continue_read, %si
     call cons_writeline
     popw %si
 
+    # reserve current values of ax
+    pushw %ax
     call get_keyboard_input
+    popw %ax    
     
+    call cons_write_crlf
+
     movw %dx, %bx 
     call cons_write_hex2
+
+    xor %cl, %cl
 
     jmp read_disk_loop
 
@@ -288,6 +278,8 @@ HexChars:
 cons_write_hex2:
     pushw %si
     pushw %cx
+    pushw %ax
+    pushw %dx
 
 	movw	$4, %cx
     
@@ -302,6 +294,8 @@ hexloop2:
 	loop hexloop2
     movw $space, %si
     call cons_write
+    popw %dx
+    popw %ax
     popw %cx
     popw %si
     ret
@@ -309,6 +303,8 @@ hexloop2:
 cons_write_hex:
     pushw %si
     pushw %cx
+    pushw %ax
+    pushw %dx
 	movw	$2, %cx
     movb    $0x0E, %ah
     rol     $8, %bx
@@ -320,6 +316,8 @@ hexloop:
     movb    HexChars(%si), %al
 	int		$0x10
 	loop	hexloop
+    popw %dx
+    popw %ax
     popw %cx
     popw %si
     ret
