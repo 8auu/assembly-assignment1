@@ -14,6 +14,26 @@ start:
 # 
 # Input: SI contains the address of the null-terminated string to be displayed
 
+cons_write_int:
+    movw    $IntBuffer + 4, %si
+    movw    %bx, %ax
+	
+getdigit:
+	xor		%dx, %dx
+	movw	$10, %cx
+	div		%cx
+	addb	$48, %dl
+	movb	%dl, (%si)
+	dec		%si
+	cmp		$0, %ax
+	jne		getdigit
+	inc		%si
+	call	cons_write
+	ret
+	
+IntBuffer:   .string "     "
+
+
 cons_write:
     movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
 
@@ -100,27 +120,13 @@ real_start:
     jmp     finish
 
 read_disk_start:
-    call cons_write_crlf
-    movw $enter_sector_number_message, %si
-    call cons_write
+    call get_sector_number
 
-    call get_keyboard_input # returns number 1-9 into %AX
-
-    # output character to screen
-    movb    $0x0e, %ah
-    int $0x10
- 
-    pushw %ax # save the contents of %al (the inputted character)
-    call cons_write_crlf
+    popw %ax # restore values of ax
 
     # output contents of sector message
     movw $contents_of_sector_message, %si
     call cons_write
-
-    popw %ax # restore values of ax
-
-    # convert ascii character to an integer value
-    sub $48, %al    
 
     pushw %ax
     # output the inputted character to screen
@@ -132,26 +138,76 @@ read_disk_start:
     call read_disk
     ret
 
+enter_amount_of_sector_to_read_message:
+    .string "Enter amount of sector to read: "
+
+
+get_sector_number:
+    call cons_write_crlf
+    movw $enter_sector_number_message, %si
+    call cons_write
+
+    # we will store the number in dxwbn
+    xor %bx, %bx # reset dx
+    
+    pushw %cx
+    movw $0, %cx
+    call sector_number_loop
+    popw %cx
+
+sector_number_loop:
+    call get_keyboard_input
+
+    # output character to screen
+    movb $0x0e, %ah
+    int $0x10
+
+    cmp $13, %al # Check if input is enter
+    jz read_disk
+
+    xor %ah, %ah
+    # Convert ASCII to digit
+    sub $48, %al
+
+    imul $10, %bx
+    add %ax, %bx
+
+    inc %cx
+    cmp $4, %cx
+    jz read_disk
+
+    call sector_number_loop
+
 read_disk:
+    call cons_write_crlf
+    movw $enter_amount_of_sector_to_read_message, %si
+    call cons_write
+
+    call get_keyboard_input
+
+    # output character to screen
+    movb $0x0e, %ah
+    int $0x10
+
+    call cons_write_crlf
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
-    movw    $2, 2(%si)                # Set the number of blocks to read to be 7
+    movb    %al, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
-    movb    %al, 8(%si)                # Set the first block to read to be block the keyboard input
+    movw    %bx, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
 	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
     jc      read_failed	              # The carry flag will be set if an error occured
 
     movb    (0xD000), %al             # Check that what we loaded is not empty
-    cmpb    $0, %al
-    je      read_failed
 
+    # prepare registers for disk loop
     movw $0xD000, %si
     movw $0, %cx
     movw $0, %dx
     
     # print first offset (0000)
-    movw %dx, %bx 
+    movw %dx, %bx
     call cons_write_hex2
 
     call read_disk_loop
@@ -275,8 +331,16 @@ read_failed:	                      # Display error messages
 	mov 	$cannot_continue, %si	
     call    cons_writeline
 
+code_finished:
+    .string "The code is finished"
+
 finish:
-    call finish
+    call cons_write_crlf
+    call cons_write_crlf
+    call cons_write_crlf
+
+endless_loop:
+    call endless_loop
 
 
 boot_device:
