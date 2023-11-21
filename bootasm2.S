@@ -177,6 +177,7 @@ sector_number_loop:
     call sector_number_loop
 
 read_disk:
+    call cons_write_crlf
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
     movw    $2, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
