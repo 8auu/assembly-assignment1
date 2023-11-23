@@ -30,10 +30,10 @@ cons_write_done:                # Something that is called will never return
                                 # not give a program any structure.  They just give a 
                                 # memory location a name that we can use in our code. 
 
-
 cons_write_ascii:
     pushw %ax
     pushw %cx
+    pushw %bx
     movw $16, %cx
     movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
 
@@ -54,8 +54,8 @@ cons_write_output:
     int     $0x10               # Output the character in AL to the screen
     loop     cons_write_ascii_rpt      # and continue
 
-
 cons_write_ascii_done:                # Something that is called will never return 
+    popw %bx
     popw %cx
     popw %ax
     ret                         # until a 'ret' instruction is encountered.  Labels do 
@@ -106,7 +106,8 @@ real_start:
 read_disk_start:
     call get_sector_number
 
-    popw %ax # restore values of ax
+    # might need who knows 
+    # popw %ax # restore values of ax
 
     # output contents of sector message
     movw $contents_of_sector_message, %si
@@ -119,7 +120,7 @@ read_disk_start:
     call cons_write_crlf
     popw %ax
 
-    call read_disk
+    call gather_information
     ret
 
 enter_amount_of_sector_to_read_message:
@@ -147,7 +148,7 @@ sector_number_loop:
     int $0x10
 
     cmp $13, %al # Check if input is enter
-    jz read_disk
+    jz gather_information
 
     xor %ah, %ah
     # Convert ASCII to digit
@@ -158,11 +159,54 @@ sector_number_loop:
 
     inc %cx
     cmp $4, %cx
-    jz read_disk
+    jz gather_information
 
     call sector_number_loop
 
-read_disk:
+enter_search_query_message:
+    .string "Please enter a search query: "
+
+search_query:
+    .string "    "
+
+get_search_query:
+    pushw %si
+    pushw %ax
+    pushw %cx
+
+    movw $enter_search_query_message, %si
+    call cons_write
+    movw $search_query, %si
+
+search_query_loop:
+    call get_keyboard_input
+ 
+    # output character to screen
+    movb $0x0e, %ah
+    int $0x10
+
+    cmp $13, %al # Check if input is enter
+    jz exit_string_loop
+ 
+    xor %ah, %ah
+    movw %ax, (%si)
+  
+    inc %cx
+    inc %si
+    cmp $5, %cx
+    jz exit_string_loop
+    
+    jmp search_query_loop
+
+exit_string_loop:
+    call cons_write_crlf
+    popw %cx
+    popw %ax
+    popw %si
+
+    jmp read_disk
+
+gather_information:
     call cons_write_crlf
     movw $enter_amount_of_sector_to_read_message, %si
     call cons_write
@@ -178,25 +222,30 @@ read_disk:
     imul $2, %ax
 
     call cons_write_crlf
+
+    call get_search_query
+
+read_disk:
     movw    $disk_address_packet, %si # Move address of the disk address packet into SI
     movb    %al, 2(%si)                # Set the number of blocks to read to be 7
     movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
     movw    %bx, 8(%si)                # Set the first block to read to be block the keyboard input
     movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
-	movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
+    movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
     int     $0x13                     # Read the disk
     jc      read_failed	              # The carry flag will be set if an error occured
-
     # prepare registers for disk loop
     movw $0xD000, %si
     movw $0, %cx
     movw $0, %dx
-    
+
     # print first offset (0000)
     movw %dx, %bx
     call cons_write_hex2
-
     call read_disk_loop
+
+    jmp finish
+
     ret
 
 read_disk_loop:   
@@ -210,6 +259,7 @@ read_disk_loop:
     popw %si
     
     inc %si
+    inc %dl # offset
 
     # display new line
     inc %ch
@@ -217,6 +267,66 @@ read_disk_loop:
     jz finish_line
 
     call read_disk_loop
+
+found_message: 
+    .string "<-- FOUND"
+
+output_found_message:
+    movw $found_message, %si
+    call cons_write
+    ret
+    
+
+find_string:
+    xor %bx, %bx
+    xor %cx, %cx
+    xor %dx, %dx
+    movb $0, %ch # represents index into line
+    movb $0, %cl # represents index into search query
+    movw $search_query, %bx
+
+
+find_string_loop:
+    movb    (%si), %al # disk bytes
+    movb    (%bx), %dl # search query
+    inc %si
+    # inc %bx
+
+    # \if end of line return
+    cmp $16, %ch
+    jz exit_search
+
+    inc %ch # represents index into line
+
+    # \if cl is 4 (length of search query) then the string matches
+    cmp $4, %cl
+    jz output_found_message
+
+    # \if dl and sl match, then one of the characters match, increment CL to move to the next character in each string
+    cmp %dl, %al
+    jz skip_query_index_reset
+
+    # \if dl and sl don't match reset the index into search query string (start from beginning)
+    xor %cl, %cl
+
+    jmp find_string_loop
+
+skip_query_index_reset:
+    # only increment if dl and al are same value
+    inc %cl # represents index into search query
+    inc %bx
+    jmp find_string_loop
+
+
+found_str:
+    .string "Found!"
+    
+exit_search:
+    ret
+
+reset_cl:
+    xor %cl, %cl
+    jmp find_string_loop
 
 finish_line:
     inc %cl
@@ -226,9 +336,22 @@ finish_line:
     # remove 16 off of SI so we can start at the beginning of the line
     sub $16, %si
     call cons_write_ascii
-    add $16, %si # add 16 back so we're not reading the already read bytes
-    movw %bx, %si
 
+
+    pushw %dx
+    pushw %bx
+    pushw %cx
+    pushw %ax
+     
+    sub $16, %si
+    call find_string
+
+    popw %ax
+    popw %cx
+    popw %bx
+    popw %dx
+
+    movw %bx, %si
     call cons_write_crlf
 
     # first half of sector
@@ -336,8 +459,8 @@ code_finished:
 
 finish:
     call cons_write_crlf
-    call cons_write_crlf
-    call cons_write_crlf
+    movw $code_finished, %si
+    call cons_writeline
 
 endless_loop:
     call endless_loop
