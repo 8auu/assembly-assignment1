@@ -299,7 +299,7 @@ find_string_loop:
     inc %ch # represents index into line
 
     # \if cl is 4 (length of search query) then the string matches
-    cmp $4, %cl
+    cmp $0, %dl
     jz output_found_message
 
     # \if dl and sl match, then one of the characters match, increment CL to move to the next character in each string
