@@ -30,10 +30,10 @@ cons_write_done:                # Something that is called will never return
                                 # not give a program any structure.  They just give a 
                                 # memory location a name that we can use in our code. 
 
-
 cons_write_ascii:
     pushw %ax
     pushw %cx
+    pushw %bx
     movw $16, %cx
     movb    $0x0e, %ah           # 0x0e is the INT 10h BIOS call to output the value contained in AL to screen
 
@@ -54,8 +54,8 @@ cons_write_output:
     int     $0x10               # Output the character in AL to the screen
     loop     cons_write_ascii_rpt      # and continue
 
-
 cons_write_ascii_done:                # Something that is called will never return 
+    popw %bx
     popw %cx
     popw %ax
     ret                         # until a 'ret' instruction is encountered.  Labels do 
@@ -218,6 +218,33 @@ read_disk_loop:
 
     call read_disk_loop
 
+foos:
+    .string "read"
+
+find_string:
+    xor %bx, %bx
+    xor %cx, %cx
+    xor %dx, %dx
+    movw $16, %cx
+    movw $foos, %bx
+
+find_string_loop:
+    movw    (%si), %ax          # Load the byte at the location contained in the SI register into AL
+    inc %si 
+    cmp %bx, %ax
+    jz output_found_message
+
+    loop find_string_loop
+    ret
+
+found_message: 
+    .string "<-- FOUND"
+
+output_found_message:
+    movw $found_message, %si
+    call cons_write
+    ret
+
 finish_line:
     inc %cl
     movb $0, %ch
@@ -226,9 +253,22 @@ finish_line:
     # remove 16 off of SI so we can start at the beginning of the line
     sub $16, %si
     call cons_write_ascii
-    add $16, %si # add 16 back so we're not reading the already read bytes
-    movw %bx, %si
 
+
+    pushw %dx
+    pushw %bx
+    pushw %cx
+    pushw %ax
+    
+    sub $16, %si
+    call find_string
+
+    popw %ax
+    popw %cx
+    popw %bx
+    popw %dx
+
+    movw %bx, %si
     call cons_write_crlf
 
     # first half of sector
