@@ -106,7 +106,8 @@ real_start:
 read_disk_start:
     call get_sector_number
 
-    popw %ax # restore values of ax
+    # might need who knows 
+    # popw %ax # restore values of ax
 
     # output contents of sector message
     movw $contents_of_sector_message, %si
@@ -178,7 +179,6 @@ get_search_query:
     movw $search_query, %si
 
 search_query_loop:
-    xor %ax, %ax
     call get_keyboard_input
  
     # output character to screen
@@ -196,7 +196,7 @@ search_query_loop:
     cmp $5, %cx
     jz exit_string_loop
     
-    call search_query_loop
+    jmp search_query_loop
 
 exit_string_loop:
     call cons_write_crlf
@@ -259,6 +259,7 @@ read_disk_loop:
     popw %si
     
     inc %si
+    inc %dl # offset
 
     # display new line
     inc %ch
@@ -337,18 +338,18 @@ finish_line:
     call cons_write_ascii
 
 
-    # pushw %dx
-    # pushw %bx
-    # pushw %cx
-    # pushw %ax
-    # 
-    # # sub $16, %si
-    # # call find_string
-# 
-    # popw %ax
-    # popw %cx
-    # popw %bx
-    # popw %dx
+    pushw %dx
+    pushw %bx
+    pushw %cx
+    pushw %ax
+     
+    sub $16, %si
+    call find_string
+
+    popw %ax
+    popw %cx
+    popw %bx
+    popw %dx
 
     movw %bx, %si
     call cons_write_crlf
