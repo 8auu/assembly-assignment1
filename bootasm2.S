@@ -226,29 +226,23 @@ gather_information:
     call get_search_query
 
 read_disk:
-    # movw    $disk_address_packet, %si # Move address of the disk address packet into SI
-    # movb    %al, 2(%si)                # Set the number of blocks to read to be 7
-    # movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
-    # movw    %bx, 8(%si)                # Set the first block to read to be block the keyboard input
-    # movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
-	# movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
-    # int     $0x13                     # Read the disk
-    # jc      read_failed	              # The carry flag will be set if an error occured
-# 
-    # # prepare registers for disk loop
-    # movw $0xD000, %si
-    # movw $0, %cx
-    # movw $0, %dx
-    # 
-    # # print first offset (0000)
-    # movw %dx, %bx
-    # call cons_write_hex2
-# 
-    # call read_disk_loop
+    movw    $disk_address_packet, %si # Move address of the disk address packet into SI
+    movb    %al, 2(%si)                # Set the number of blocks to read to be 7
+    movw    $0xD000, 4(%si)           # Set the adddress to read into to be 0xD000
+    movw    %bx, 8(%si)                # Set the first block to read to be block the keyboard input
+    movb    $0x42, %ah                # 0x42 is the int 13h BIOS function to read the disk using LBA addressing
+    movb	(boot_device), %dl        # Retrieve the ID of our boot device and put in DL	
+    int     $0x13                     # Read the disk
+    jc      read_failed	              # The carry flag will be set if an error occured
+    # prepare registers for disk loop
+    movw $0xD000, %si
+    movw $0, %cx
+    movw $0, %dx
 
-
-    movw $test_string, %si
-    call find_string
+    # print first offset (0000)
+    movw %dx, %bx
+    call cons_write_hex2
+    call read_disk_loop
 
     jmp finish
 
@@ -276,11 +270,11 @@ read_disk_loop:
 found_message: 
     .string "<-- FOUND"
 
-test_string:
-    .string "three boot fours"
-
-found_chars:
-    .string ""
+output_found_message:
+    movw $found_message, %si
+    call cons_write
+    ret
+    
 
 find_string:
     xor %bx, %bx
@@ -295,7 +289,7 @@ find_string_loop:
     movb    (%si), %al # disk bytes
     movb    (%bx), %dl # search query
     inc %si
-    inc %bx
+    # inc %bx
 
     # \if end of line return
     cmp $16, %ch
@@ -305,7 +299,7 @@ find_string_loop:
 
     # \if cl is 4 (length of search query) then the string matches
     cmp $4, %cl
-    jz CHOO
+    jz output_found_message
 
     # \if dl and sl match, then one of the characters match, increment CL to move to the next character in each string
     cmp %dl, %al
@@ -325,27 +319,13 @@ skip_query_index_reset:
 
 found_str:
     .string "Found!"
-
-CHOO:
-    jmp endless_loop
-
-
-exiting_message:
-    .string " exited"
     
 exit_search:
-    movw $exiting_message, %si
-    call cons_write 
     ret
 
 reset_cl:
     xor %cl, %cl
     jmp find_string_loop
-
-output_found_message:
-    movw $found_message, %si
-    call cons_write
-    ret
 
 finish_line:
     inc %cl
@@ -357,18 +337,18 @@ finish_line:
     call cons_write_ascii
 
 
-    pushw %dx
-    pushw %bx
-    pushw %cx
-    pushw %ax
-    
-    sub $16, %si
-    call find_string
-
-    popw %ax
-    popw %cx
-    popw %bx
-    popw %dx
+    # pushw %dx
+    # pushw %bx
+    # pushw %cx
+    # pushw %ax
+    # 
+    # # sub $16, %si
+    # # call find_string
+# 
+    # popw %ax
+    # popw %cx
+    # popw %bx
+    # popw %dx
 
     movw %bx, %si
     call cons_write_crlf
