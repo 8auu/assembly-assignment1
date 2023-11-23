@@ -92,7 +92,7 @@ real_start:
     movw    $boot_message, %si  # Display our boot message
     call    cons_writeline
 
-    movw    $booted_from_msg, %si # (harddrive or floppy disk)
+    movw    $booted_from_msg, %si # display booted from (harddrive or floppy disk)
     call    cons_write
 
     movb    (boot_device), %dl # check which device we booted from
@@ -128,13 +128,16 @@ read_disk_start:
     call gather_information
     ret
 
+enter_amount_of_sector_to_read_message:
+    .string "Enter amount of sectors to read (1-9): "
+
+
 get_sector_number:
-    pushw %dx
     call cons_write_crlf
     movw $enter_sector_number_message, %si
     call cons_write
 
-    xor %bx, %bx
+    xor %bx, %bx 
     
     pushw %cx
     movw $0, %cx
@@ -142,9 +145,9 @@ get_sector_number:
     popw %cx
 
 sector_number_loop:
-    call get_keyboard_input # 8au
+    call get_keyboard_input
 
-    cmp $13, %al # Check if input is enter
+    cmp $13, %al # check if input is enter
     jz gather_information
 
     # turn keyboard input into a number between 0-9 (if result is above 9 it is not a valid number)
@@ -163,7 +166,7 @@ sector_number_loop:
     int $0x10
 
     xor %ah, %ah
-    # Convert ASCII to digit
+    # convert ascii to digit
     sub $48, %al
 
     # shift the previous input digit by 1 and add the new input onto the new number
@@ -178,17 +181,16 @@ get_search_query:
     pushw %cx
     xor %cx, %cx
 
-    # ouput message
+    # output emssage
     movw $enter_search_query_message, %si
     call cons_write
-
     movw $search_query, %si
 
 # ask for user input (max 4 char)
 search_query_loop:
     call get_keyboard_input
 
-    cmp $13, %al # Check if input is enter
+    cmp $13, %al # check if input is enter key
     jz exit_string_loop
  
     cmp $4, %cx
@@ -197,10 +199,10 @@ search_query_loop:
     # output character to screen
     movb $0x0e, %ah
     int $0x10
-
+ 
     xor %ah, %ah
     movw %ax, (%si)
-    
+  
     inc %cx # represents amount of characters
     inc %si
     
@@ -218,15 +220,14 @@ exit_string_loop:
 # a label used to gather all program settings, eg sector number, amount of sectors to read etc..
 gather_information:
     call cons_write_crlf
-
     movw $enter_amount_of_sector_to_read_message, %si
     call cons_write
-    
+
     xor %ax, %ax
     
     call get_keyboard_input
 
-    cmp $13, %al # Check if input is enter
+    cmp $13, %al # check if input is enter key
     jz gather_information
 
     # turn keyboard input into a number between 0-9 (if result is above 9 it is not a valid number)
@@ -243,6 +244,7 @@ gather_information:
     # output character to screen
     movb $0x0e, %ah
     int $0x10
+
 
     # convert ascii char into number (0-9)
     sub $48, %al
@@ -273,10 +275,11 @@ read_disk:
     # print first offset (0000)
     movw %dx, %bx
     call cons_write_hex2
-
     call read_disk_loop
 
     jmp finish
+
+    ret
 
 read_disk_loop:   
     movw (%si), %bx 
@@ -293,16 +296,11 @@ read_disk_loop:
 
     # display new line
     inc %ch # represents the amount of characters on the line
-    cmp $16, %ch 
+    cmp $16, %ch
     jz finish_line
 
     call read_disk_loop
-
-output_found_message:
-    movw $found_message, %si
-    call cons_write
-    ret
-
+    
 find_string:
     pushw %dx
     pushw %bx
@@ -312,10 +310,10 @@ find_string:
     xor %bx, %bx
     xor %cx, %cx
     xor %dx, %dx
+    
     movb $0, %ch # represents index into line
     movb $0, %cl # represents index into search query
     movw $search_query, %bx
-
 
 find_string_loop:
     movb    (%si), %al # al represents disk bytes
@@ -341,7 +339,7 @@ find_string_loop:
     xor %bx, %bx
 
     movw $search_query, %bx
-
+    
     jmp find_string_loop
 
 skip_query_index_reset:
@@ -349,6 +347,12 @@ skip_query_index_reset:
     inc %cl # represents index into search query
     inc %bx
     jmp find_string_loop
+
+
+output_found_message:
+    movw $found_message, %si
+    call cons_write
+    jmp exit_search
     
 exit_search:
     popw %ax
@@ -365,12 +369,10 @@ finish_line:
     # remove 16 off of SI so we can start at the beginning of the line
     sub $16, %si
     call cons_write_ascii
-    
-    # remove 16 off of SI so we can start at the beginning of the line
+     
     sub $16, %si
     call find_string
 
-    # move saved value (last char of line back into si)
     movw %bx, %si
     call cons_write_crlf
 
@@ -486,6 +488,7 @@ finish:
 endless_loop:
     call endless_loop
 
+
 boot_device:
     .byte   0
 
@@ -527,9 +530,6 @@ read_failed_msg:
     .string "Unable to read stage 2 of the boot process"
 cannot_continue:
     .string "Cannot continue boot process"
-
-enter_amount_of_sector_to_read_message:
-    .string "Enter amount of sectors to read (1-9): "
 
 enter_search_query_message:
     .string "Please enter a search query (max 4 characters. Example: boot): "
